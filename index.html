@@ -845,7 +845,8 @@
             let optionCount = 0;
             
             for (const line of lines) {
-                if (/^[ABCDEabcdeАБВГДЕабвгде1-5]\s*[\)\.\:]\s*.+/.test(line.trim())) {
+                // Расширяем: цифры 1-9, латиница A-I, кириллица А-И
+                if (/^[A-Ia-iА-Иа-и1-9]\s*[\)\.\:]\s*.+/.test(line.trim())) {
                     optionCount++;
                 }
             }
@@ -1143,7 +1144,8 @@
             const options = [];
             let correctAnswer = '';
 
-            const optionPattern = /^([ABCDEabcdeАБВГДЕабвгде1-5])\s*[\)\.\:]\s*(.+)/;
+            // Расширяем до 1-9 для поддержки большего количества вариантов
+            const optionPattern = /^([ABCDEFGHIabcdefghiАБВГДЕЖЗИабвгдежзи1-9])\s*[\)\.\:]\s*(.+)/;
             
             let foundOptions = false;
 
@@ -1153,8 +1155,13 @@
                 if (match) {
                     foundOptions = true;
                     let key = match[1].toUpperCase();
-                    if (/[A-E]/.test(key)) {
-                        key = {'A':'А','B':'Б','C':'В','D':'Г','E':'Д'}[key] || key;
+                    // Расширяем маппинг латиницы в кириллицу
+                    const latinToCyrillic = {
+                        'A':'А','B':'Б','C':'В','D':'Г','E':'Д',
+                        'F':'Е','G':'Ж','H':'З','I':'И'
+                    };
+                    if (latinToCyrillic[key]) {
+                        key = latinToCyrillic[key];
                     }
                     options.push({
                         key: key,
@@ -1162,14 +1169,15 @@
                     });
                 } else if (!foundOptions && line.length > 2) {
                     questionText += (questionText ? ' ' : '') + line;
-                } else if (foundOptions && /^[ABCDEАБВГДЕабвгде1-5]$/i.test(line)) {
+                } else if (foundOptions && /^[ABCDEFGHIАБВГДЕЖЗИабвгдежзи1-9]$/i.test(line)) {
                     correctAnswer = normalizeAnswerKey(line.toUpperCase());
                 }
             }
 
+            // Берём ответ из отдельной ячейки
             if (!correctAnswer && answerFromCell) {
                 const cleaned = answerFromCell.trim();
-                const answerMatch = cleaned.match(/^([ABCDEАБВГДЕабвгде1-5])/i);
+                const answerMatch = cleaned.match(/^([ABCDEFGHIАБВГДЕЖЗИабвгдежзи1-9])/i);
                 if (answerMatch) {
                     correctAnswer = normalizeAnswerKey(answerMatch[1].toUpperCase());
                 }
@@ -1177,6 +1185,7 @@
 
             log(`    Simple parse: q="${questionText.substring(0, 40)}...", opts=${options.length}, keys=[${options.map(o=>o.key).join(',')}], ans="${correctAnswer}"`);
 
+            // Валидация
             if (questionText && options.length >= 2 && correctAnswer) {
                 const optionKeys = options.map(o => o.key);
                 if (optionKeys.includes(correctAnswer)) {
@@ -1197,13 +1206,11 @@
         }
 
         function normalizeAnswerKey(key) {
-            const latinToCyrillic = {'A':'А','B':'Б','C':'В','D':'Г','E':'Д'};
+            const latinToCyrillic = {
+                'A':'А','B':'Б','C':'В','D':'Г','E':'Д',
+                'F':'Е','G':'Ж','H':'З','I':'И'
+            };
             return latinToCyrillic[key] || key;
-        }
-
-        function normalizeKey(key) {
-            const map = { 'A': 'А', 'B': 'Б', 'C': 'В', 'D': 'Г', 'E': 'Д' };
-            return map[key] || key;
         }
 
         function parseFreeQuestion(questionText, answerText) {
