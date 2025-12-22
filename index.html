@@ -718,7 +718,7 @@
             
             log(`    Парсинг ответа: "${cleanText}"`);
             
-            const pattern1 = /(\d+)\s*[\)\-–—]\s*([А-ЯA-Zа-яa-z])/g;
+            const pattern1 = /(\d+)\s*[\)\-–—]\s*([А-Яа-яA-Za-z])/g;
             let match;
             while ((match = pattern1.exec(cleanText)) !== null) {
                 let letter = match[2].toUpperCase();
@@ -1237,26 +1237,39 @@
             const simple = parsedQuestions.filter(q => q.type === 'simple').length;
             const matching = parsedQuestions.filter(q => q.type === 'matching').length;
             const free = parsedQuestions.filter(q => q.type === 'free').length;
-            const disciplines = [...new Set(parsedQuestions.map(q => q.discipline))];
 
-            status.innerHTML = `<span class="text-green-500">✅ Найдено ${parsedQuestions.length} вопросов (простых: ${simple}, сопоставление: ${matching}, свободных: ${free})<br>📚 Дисциплин: ${disciplines.length}</span>`;
+            status.innerHTML = `<span class="text-green-500">✅ Найдено ${parsedQuestions.length} вопросов (простых: ${simple}, сопоставление: ${matching}, свободных: ${free})</span>`;
             preview.classList.remove('hidden');
 
             content.innerHTML = parsedQuestions.map((q, i) => `
                 <div class="border-b pb-2 mb-2">
                     <div class="flex justify-between items-start">
-                        <div class="flex flex-wrap gap-1">
-                            <span class="font-bold text-sm px-2 py-1 rounded ${
-                                q.type === 'simple' ? 'bg-blue-100 text-blue-800' : 
-                                q.type === 'matching' ? 'bg-purple-100 text-purple-800' : 
-                                'bg-green-100 text-green-800'
-                            }">${i + 1}. ${q.type === 'simple' ? 'Простой' : q.type === 'matching' ? 'Сопоставление' : 'Свободный'}</span>
-                            ${q.discipline ? `<span class="text-sm px-2 py-1 rounded bg-yellow-100 text-yellow-800">📚 ${escapeHtml(q.discipline)}</span>` : ''}
-                        </div>
+                        <span class="font-bold text-sm px-2 py-1 rounded ${
+                            q.type === 'simple' ? 'bg-blue-100 text-blue-800' : 
+                            q.type === 'matching' ? 'bg-purple-100 text-purple-800' : 
+                            'bg-green-100 text-green-800'
+                        }">${i + 1}. ${q.type === 'simple' ? 'Простой' : q.type === 'matching' ? 'Сопоставление' : 'Свободный'}</span>
                         <button onclick="removeParsedQuestion(${i})" class="text-red-500 hover:text-red-700 ml-2">✖️</button>
                     </div>
                     <p class="text-sm mt-1">${escapeHtml(q.question.substring(0, 100))}${q.question.length > 100 ? '...' : ''}</p>
-                    <p class="text-xs text-gray-500 mt-1">Ответ: ${q.type === 'matching' ? Object.entries(q.correctAnswer).map(([k,v]) => `${k}-${v}`).join(', ') : q.correctAnswer}</p>
+                    ${q.type === 'matching' ? 
+                        `<details class="cursor-pointer mt-1">
+                            <summary class="text-xs text-blue-600 hover:text-blue-800">Показать соответствия</summary>
+                            <ul class="mt-1 text-xs space-y-1 ml-4">
+                                ${Object.entries(q.correctAnswer).map(([rightKey, leftKey]) => {
+                                    const rightItem = q.rightItems.find(item => item.key === rightKey);
+                                    const leftItem = q.leftItems.find(item => item.key === leftKey);
+                                    const rightText = rightItem ? rightItem.text : rightKey;
+                                    const leftText = leftItem ? leftItem.text : leftKey;
+                                    return `<li>"${escapeHtml(rightText.substring(0, 30))}${rightText.length > 30 ? '...' : ''}" → "${escapeHtml(leftText.substring(0, 30))}${leftText.length > 30 ? '...' : ''}"</li>`;
+                                }).join('')}
+                            </ul>
+                        </details>` 
+                        : `<p class="text-xs text-gray-500 mt-1">Ответ: ${q.type === 'simple' ? (() => {
+                            const opt = q.options.find(o => o.key === q.correctAnswer);
+                            return opt ? escapeHtml(opt.text.substring(0, 40)) + (opt.text.length > 40 ? '...' : '') : q.correctAnswer;
+                        })() : escapeHtml(q.correctAnswer.substring(0, 40)) + (q.correctAnswer.length > 40 ? '...' : '')}</p>`
+                    }
                 </div>
             `).join('');
         }
@@ -1287,23 +1300,15 @@
         function renderQuestionsList() {
             const list = document.getElementById('questionsList');
             const count = document.getElementById('questionCount');
-            const filterValue = document.getElementById('questionsListFilter')?.value || 'all';
             
-            let filteredQuestions = questions;
-            if (filterValue !== 'all') {
-                filteredQuestions = questions.filter(q => q.discipline === filterValue);
-            }
+            count.textContent = `${questions.length} вопросов`;
             
-            count.textContent = `${filteredQuestions.length} из ${questions.length} вопросов`;
-            
-            if (filteredQuestions.length === 0) {
-                list.innerHTML = '<p class="text-gray-500 text-center py-8">Нет вопросов</p>';
+            if (questions.length === 0) {
+                list.innerHTML = '<p class="text-gray-500 text-center py-8">Нет загруженных вопросов</p>';
                 return;
             }
 
-            list.innerHTML = filteredQuestions.map((q, i) => {
-                const realIndex = questions.indexOf(q);
-                return `
+            list.innerHTML = questions.map((q, i) => `
                 <div class="border rounded-lg p-4 bg-gray-50">
                     <div class="flex justify-between items-start gap-2">
                         <div class="flex-1">
@@ -1316,16 +1321,32 @@
                                 ${q.discipline ? `<span class="inline-block px-2 py-1 text-xs rounded bg-yellow-100 text-yellow-800">📚 ${escapeHtml(q.discipline)}</span>` : ''}
                             </div>
                             <p class="font-medium">${escapeHtml(q.question)}</p>
-                            <p class="text-sm text-gray-500 mt-1">Ответ: ${
-                                q.type === 'simple' ? q.correctAnswer : 
-                                q.type === 'matching' ? Object.entries(q.correctAnswer).map(([k,v]) => `${k}-${v}`).join(', ') :
-                                q.correctAnswer.substring(0, 50) + (q.correctAnswer.length > 50 ? '...' : '')
-                            }</p>
+                            ${q.type === 'matching' ? 
+                                `<details class="mt-2 cursor-pointer">
+                                    <summary class="text-sm text-blue-600 hover:text-blue-800">Показать соответствия</summary>
+                                    <ul class="mt-2 text-sm space-y-1 bg-white rounded p-2 border">
+                                        ${Object.entries(q.correctAnswer).map(([rightKey, leftKey]) => {
+                                            const rightItem = q.rightItems.find(item => item.key === rightKey);
+                                            const leftItem = q.leftItems.find(item => item.key === leftKey);
+                                            const rightText = rightItem ? rightItem.text : rightKey;
+                                            const leftText = leftItem ? leftItem.text : leftKey;
+                                            return `<li class="text-xs">• <span class="text-gray-700">"${escapeHtml(rightText.substring(0, 40))}${rightText.length > 40 ? '...' : ''}"</span> → <span class="text-blue-700">"${escapeHtml(leftText.substring(0, 40))}${leftText.length > 40 ? '...' : ''}"</span></li>`;
+                                        }).join('')}
+                                    </ul>
+                                </details>`
+                                : `<p class="text-sm text-gray-500 mt-1">Ответ: ${
+                                    q.type === 'simple' ? (() => {
+                                        const opt = q.options.find(o => o.key === q.correctAnswer);
+                                        return opt ? escapeHtml(opt.text) : q.correctAnswer;
+                                    })() :
+                                    q.correctAnswer.substring(0, 50) + (q.correctAnswer.length > 50 ? '...' : '')
+                                }</p>`
+                            }
                         </div>
-                        <button onclick="deleteQuestion(${realIndex})" class="text-red-500 hover:text-red-700 p-1">🗑️</button>
+                        <button onclick="deleteQuestion(${i})" class="text-red-500 hover:text-red-700 p-1">🗑️</button>
                     </div>
                 </div>
-            `}).join('');
+            `).join('');
         }
 
         function deleteQuestion(index) {
@@ -1376,9 +1397,18 @@
                 testQuestions = shuffleArray(testQuestions);
             }
 
+            // ИСПРАВЛЕНИЕ 1: Добавлено перемешивание для matching-вопросов
             currentTest = testQuestions.slice(0, limit).map(q => {
-                if (randomizeAnswers && q.type === 'simple') {
-                    return { ...q, options: shuffleArray([...q.options]) };
+                if (randomizeAnswers) {
+                    if (q.type === 'simple') {
+                        return { ...q, options: shuffleArray([...q.options]) };
+                    } else if (q.type === 'matching') {
+                        return { 
+                            ...q, 
+                            leftItems: shuffleArray([...q.leftItems]),
+                            rightItems: shuffleArray([...q.rightItems])
+                        };
+                    }
                 }
                 return { ...q };
             });
@@ -1444,10 +1474,11 @@
                 html += '<div class="space-y-2">';
                 q.options.forEach((opt, i) => {
                     const checked = testAnswers[currentIndex] === opt.key ? 'checked' : '';
+                    // ИСПРАВЛЕНИЕ 2: Убрано отображение ${opt.key}) - теперь только текст
                     html += `
                         <label class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition">
                             <input type="radio" name="answer" value="${opt.key}" ${checked} onchange="testAnswers[${currentIndex}] = '${opt.key}'" class="w-5 h-5">
-                            <span><strong>${opt.key})</strong> ${escapeHtml(opt.text)}</span>
+                            <span>${escapeHtml(opt.text)}</span>
                         </label>
                     `;
                 });
@@ -1494,16 +1525,17 @@
             let html = '<div class="space-y-4">';
             
             html += '<div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">';
-            html += '📱 Выберите соответствующую букву для каждого пункта';
+            html += '📱 Выберите соответствующий вариант для каждого пункта';
             html += '</div>';
             
+            // Отображаем правую колонку (то, к чему нужно подобрать)
             q.rightItems.forEach(item => {
                 const currentMatch = testAnswers[currentIndex][item.key] || '';
                 
                 html += `
                     <div class="p-3 border-2 rounded-lg bg-white">
-                        <div class="text-sm text-gray-700 mb-2">
-                            <strong class="text-blue-600">${item.key})</strong> ${escapeHtml(item.text)}
+                        <div class="text-sm text-gray-700 mb-2 font-medium">
+                            ${escapeHtml(item.text)}
                         </div>
                         <select 
                             class="w-full border-2 rounded-lg p-2 text-base ${currentMatch ? 'border-green-500 bg-green-50' : 'border-gray-300'}"
@@ -1512,7 +1544,8 @@
                             <option value="">-- Выберите --</option>
                             ${q.leftItems.map(opt => {
                                 const selected = currentMatch === opt.key ? 'selected' : '';
-                                return `<option value="${opt.key}" ${selected}>${opt.key}) ${escapeHtml(opt.text)}</option>`;
+                                // Убираем префиксы из опций
+                                return `<option value="${opt.key}" ${selected}>${escapeHtml(opt.text)}</option>`;
                             }).join('')}
                         </select>
                     </div>
@@ -1527,13 +1560,14 @@
             let html = '<div class="space-y-6">';
             
             html += '<div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">';
-            html += '🖱️ Перетащите карточки с буквами к соответствующим пунктам справа';
+            html += '🖱️ Перетащите карточки слева к соответствующим пунктам справа';
             html += '</div>';
             
             html += '<div class="grid md:grid-cols-2 gap-6">';
             
+            // Левая часть - перетаскиваемые карточки (без префиксов)
             html += '<div>';
-            html += '<h3 class="font-semibold mb-3 text-gray-700">Перетащите карточки:</h3>';
+            html += '<h3 class="font-semibold mb-3 text-gray-700">Перетащите варианты:</h3>';
             html += '<div class="space-y-2" id="dragSource">';
             
             q.leftItems.forEach(item => {
@@ -1544,9 +1578,9 @@
                         data-key="${item.key}"
                         ondragstart="handleDragStart(event, '${item.key}')"
                         ondragend="handleDragEnd(event)"
-                        class="p-3 border-2 rounded-lg bg-white cursor-move hover:shadow-lg transition ${isUsed ? 'opacity-40' : 'border-blue-300'}"
+                        class="p-3 border-2 rounded-lg bg-white cursor-move hover:shadow-lg transition ${isUsed ? 'opacity-40 border-gray-200' : 'border-blue-300'}"
                     >
-                        <strong class="text-lg text-blue-600">${item.key})</strong> <span class="text-gray-700">${escapeHtml(item.text)}</span>
+                        <span class="text-gray-700">${escapeHtml(item.text)}</span>
                     </div>
                 `;
             });
@@ -1554,28 +1588,33 @@
             html += '</div>';
             html += '</div>';
             
+            // Правая часть - зоны для дропа (без префиксов)
             html += '<div>';
             html += '<h3 class="font-semibold mb-3 text-gray-700">К этим пунктам:</h3>';
             html += '<div class="space-y-2">';
             
             q.rightItems.forEach(item => {
                 const currentMatch = testAnswers[currentIndex][item.key] || '';
+                const matchedItem = currentMatch ? q.leftItems.find(l => l.key === currentMatch) : null;
+                
                 html += `
                     <div 
-                        class="p-3 border-2 border-dashed rounded-lg bg-gray-50 min-h-[60px]"
+                        class="p-3 border-2 border-dashed rounded-lg bg-gray-50 min-h-[70px]"
                         ondragover="handleDragOver(event)"
                         ondragleave="handleDragLeave(event)"
                         ondrop="handleDrop(event, '${item.key}')"
                         data-target="${item.key}"
                     >
-                        <div class="text-sm text-gray-600 mb-1"><strong>${item.key})</strong> ${escapeHtml(item.text)}</div>
-                        <div class="mt-2 min-h-[30px] flex items-center justify-center" id="slot-${item.key}">
-                            ${currentMatch ? `
-                                <div class="inline-flex items-center gap-2 bg-green-100 text-green-800 px-3 py-1 rounded-full border border-green-300">
-                                    <strong>${currentMatch}</strong>
-                                    <button onclick="removeMatch('${item.key}')" class="text-red-500 hover:text-red-700 font-bold">✖</button>
+                        <div class="text-sm text-gray-700 font-medium mb-2">
+                            ${escapeHtml(item.text)}
+                        </div>
+                        <div class="min-h-[30px] flex items-center" id="slot-${item.key}">
+                            ${matchedItem ? `
+                                <div class="inline-flex items-center gap-2 bg-green-100 text-green-800 px-3 py-1 rounded-lg border border-green-300 text-sm">
+                                    <span>${escapeHtml(matchedItem.text.length > 40 ? matchedItem.text.substring(0, 40) + '...' : matchedItem.text)}</span>
+                                    <button onclick="removeMatch('${item.key}')" class="text-red-500 hover:text-red-700 font-bold ml-1">✖</button>
                                 </div>
-                            ` : '<span class="text-gray-400 text-sm">Перетащите сюда</span>'}
+                            ` : '<span class="text-gray-400 text-sm italic">Перетащите сюда вариант</span>'}
                         </div>
                     </div>
                 `;
@@ -1635,47 +1674,105 @@
         }
 
         function checkAnswer() {
-            const q = currentTest[currentIndex];
-            const area = document.getElementById('questionArea');
-            let isCorrect = false;
-            let feedback = '';
+                const q = currentTest[currentIndex];
+                const area = document.getElementById('questionArea');
+                let isCorrect = false;
+                let feedback = '';
 
             if (q.type === 'simple') {
                 const userAnswer = testAnswers[currentIndex];
                 isCorrect = userAnswer === q.correctAnswer;
-                feedback = isCorrect 
-                    ? '<div class="mt-4 p-4 bg-green-100 text-green-800 rounded-lg">✅ Правильно!</div>'
-                    : `<div class="mt-4 p-4 bg-red-100 text-red-800 rounded-lg">❌ Неправильно. Правильный ответ: <strong>${q.correctAnswer}</strong></div>`;
+                
+                // Находим полный текст правильного ответа
+                const correctOption = q.options.find(opt => opt.key === q.correctAnswer);
+                const correctText = correctOption ? correctOption.text : q.correctAnswer;
+                
+                if (isCorrect) {
+                    feedback = '<div class="mt-4 p-4 bg-green-100 text-green-800 rounded-lg">✅ Правильно!</div>';
+                } else {
+                    feedback = `
+                        <div class="mt-4 p-4 bg-red-100 text-red-800 rounded-lg">
+                            ❌ Неправильно.<br>
+                            <strong>Правильный ответ:</strong> ${escapeHtml(correctText)}
+                        </div>
+                    `;
+                }
+                
+                // Подсвечиваем правильный и неправильный ответы в списке
+                const labels = area.querySelectorAll('label');
+                labels.forEach(label => {
+                    const input = label.querySelector('input');
+                    if (input) {
+                        if (input.value === q.correctAnswer) {
+                            label.classList.add('bg-green-100', 'border-green-500');
+                            label.classList.remove('hover:bg-gray-50');
+                        } else if (input.value === userAnswer && userAnswer !== q.correctAnswer) {
+                            label.classList.add('bg-red-100', 'border-red-500');
+                            label.classList.remove('hover:bg-gray-50');
+                        }
+                    }
+                });
+                
             } else if (q.type === 'matching') {
                 const userAnswer = testAnswers[currentIndex] || {};
                 isCorrect = true;
-                let details = [];
+                let wrongPairs = [];
+                let correctPairs = [];
                 
-                Object.entries(q.correctAnswer).forEach(([key, val]) => {
-                    if (userAnswer[key] !== val) {
+                Object.entries(q.correctAnswer).forEach(([rightKey, leftKey]) => {
+                    // Находим тексты для отображения
+                    const rightItem = q.rightItems.find(item => item.key === rightKey);
+                    const leftItem = q.leftItems.find(item => item.key === leftKey);
+                    
+                    const rightText = rightItem ? rightItem.text : rightKey;
+                    const leftText = leftItem ? leftItem.text : leftKey;
+                    
+                    if (userAnswer[rightKey] !== leftKey) {
                         isCorrect = false;
-                        details.push(`${key} → ${val}`);
+                        // Сокращаем текст если слишком длинный
+                        const shortRight = rightText.length > 40 ? rightText.substring(0, 40) + '...' : rightText;
+                        const shortLeft = leftText.length > 40 ? leftText.substring(0, 40) + '...' : leftText;
+                        correctPairs.push(`<span class="text-green-700">"${escapeHtml(shortRight)}"</span> → <span class="text-blue-700">"${escapeHtml(shortLeft)}"</span>`);
                     }
                 });
 
-                feedback = isCorrect 
-                    ? '<div class="mt-4 p-4 bg-green-100 text-green-800 rounded-lg">✅ Правильно!</div>'
-                    : `<div class="mt-4 p-4 bg-red-100 text-red-800 rounded-lg">❌ Неправильно. Правильные соответствия: ${details.join(', ')}</div>`;
+                if (isCorrect) {
+                    feedback = '<div class="mt-4 p-4 bg-green-100 text-green-800 rounded-lg">✅ Правильно! Все соответствия верны.</div>';
+                } else {
+                    feedback = `
+                        <div class="mt-4 p-4 bg-red-100 text-red-800 rounded-lg">
+                            ❌ Неправильно.<br>
+                            <strong>Правильные соответствия:</strong>
+                            <ul class="mt-2 space-y-1 text-sm">
+                                ${correctPairs.map(pair => `<li>• ${pair}</li>`).join('')}
+                            </ul>
+                        </div>
+                    `;
+                }
+                
             } else if (q.type === 'free') {
                 const userAnswer = (testAnswers[currentIndex] || '').toLowerCase().trim();
                 const correct = q.correctAnswer.toLowerCase().trim();
+                
+                // Проверяем совпадение ключевых слов
                 const correctWords = correct.split(/[\s,\.]+/).filter(w => w.length > 3);
                 const matchedWords = correctWords.filter(w => userAnswer.includes(w));
                 isCorrect = matchedWords.length >= correctWords.length * 0.5;
                 
-                feedback = `<div class="mt-4 p-4 ${isCorrect ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'} rounded-lg">
-                    ${isCorrect ? '✅ Похоже на правильный ответ!' : '⚠️ Проверьте свой ответ'}
-                    <br><strong>Эталон:</strong> ${escapeHtml(q.correctAnswer)}
-                </div>`;
+                feedback = `
+                    <div class="mt-4 p-4 ${isCorrect ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'} rounded-lg">
+                        ${isCorrect ? '✅ Похоже на правильный ответ!' : '⚠️ Проверьте свой ответ'}
+                        <div class="mt-2 p-3 bg-white rounded border">
+                            <strong>Эталонный ответ:</strong><br>
+                            <span class="text-gray-700">${escapeHtml(q.correctAnswer)}</span>
+                        </div>
+                    </div>
+                `;
             }
 
             area.innerHTML += feedback;
 
+            // Сохраняем ошибку
             if (!isCorrect && testMode !== 'errors') {
                 const existingError = errors.find(e => e.question === q.question);
                 if (!existingError) {
@@ -1690,7 +1787,7 @@
             document.getElementById('checkBtn').disabled = true;
             document.getElementById('checkBtn').classList.add('opacity-50');
         }
-
+        
         function prevQuestion() {
             if (currentIndex > 0) {
                 currentIndex--;
@@ -1758,13 +1855,27 @@
                 <div class="border rounded-lg p-4 bg-red-50">
                     <div class="flex justify-between items-start gap-2">
                         <div class="flex-1">
-                            ${q.discipline ? `<span class="inline-block px-2 py-1 text-xs rounded bg-yellow-100 text-yellow-800 mb-2">📚 ${escapeHtml(q.discipline)}</span>` : ''}
                             <p class="font-medium">${escapeHtml(q.question)}</p>
-                            <p class="text-sm text-gray-600 mt-1">Правильный ответ: 
-                                ${q.type === 'simple' ? q.correctAnswer : 
-                                  q.type === 'matching' ? Object.entries(q.correctAnswer).map(([k,v]) => `${k}-${v}`).join(', ') :
-                                  escapeHtml(q.correctAnswer.substring(0, 50)) + '...'}
-                            </p>
+                            ${q.type === 'matching' ? 
+                                `<details class="mt-2 cursor-pointer">
+                                    <summary class="text-sm text-blue-600 hover:text-blue-800">Показать правильные соответствия</summary>
+                                    <ul class="mt-2 text-sm space-y-1 bg-white rounded p-2 border">
+                                        ${Object.entries(q.correctAnswer).map(([rightKey, leftKey]) => {
+                                            const rightItem = q.rightItems.find(item => item.key === rightKey);
+                                            const leftItem = q.leftItems.find(item => item.key === leftKey);
+                                            const rightText = rightItem ? rightItem.text : rightKey;
+                                            const leftText = leftItem ? leftItem.text : leftKey;
+                                            return `<li class="text-xs">• <span class="text-gray-700">"${escapeHtml(rightText.substring(0, 40))}${rightText.length > 40 ? '...' : ''}"</span> → <span class="text-green-700">"${escapeHtml(leftText.substring(0, 40))}${leftText.length > 40 ? '...' : ''}"</span></li>`;
+                                        }).join('')}
+                                    </ul>
+                                </details>`
+                                : `<p class="text-sm text-gray-600 mt-1">Правильный ответ: 
+                                    ${q.type === 'simple' ? (() => {
+                                        const opt = q.options ? q.options.find(o => o.key === q.correctAnswer) : null;
+                                        return opt ? escapeHtml(opt.text) : q.correctAnswer;
+                                    })() : escapeHtml(q.correctAnswer.substring(0, 50)) + (q.correctAnswer.length > 50 ? '...' : '')}
+                                </p>`
+                            }
                         </div>
                         <button onclick="removeError(${i})" class="text-gray-500 hover:text-gray-700 p-1">✖️</button>
                     </div>
